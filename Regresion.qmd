@@ -1,0 +1,135 @@
+---
+title: "Regresion"
+format: html
+editor: visual
+---
+
+## Pre-procesamiento y modelado
+
+La tarea asignada es hacer un algoritmo de regresión lineal que prediga el precio de un inmueble en función de las características elegidas.
+
+```{r}
+df<-read.csv('00_cleaned_airbnb.csv', stringsAsFactor=T)
+head(df)
+```
+
+Vamos a crear un modelo de regresión lineal en el que trataremos de obtener el precio del inmueble (Price) en función de la fianza (Security.Deposit), tarifa de limpieza (Cleaning.Fee), número de reseñas (Number.of.Reviews), número de huéspedes (Accommodates), puntuación en la reseña sobre ubicación (Review.Scores.Location) y tasa de respuesta del anfitrión (Host.Response.Rate).
+
+Vamos a ver como se relacionan entre sí en las siguientes gráficas:
+
+```{r}
+library(ggplot2)
+g1 = ggplot(df, aes(x=Security.Deposit, y=Price))+geom_point(color='blue')+
+  geom_smooth(method='lm', formula = y~x, color='red')+
+  xlab('Fianza')+ylab('Precio')
+
+g2 = ggplot(df, aes(x=Cleaning.Fee, y=Price))+geom_point(color='blue')+
+  geom_smooth(method='lm', formula = y~x, color='red')+
+  xlab('Tarifa de limpieza')+ylab('Precio')
+
+g3 = ggplot(df, aes(x=Number.of.Reviews, y=Price))+geom_point(color='blue')+
+  geom_smooth(method='lm', formula = y~x, color='red')+
+  xlab('Número de reseñas')+ylab('Precio')
+
+g4 = ggplot(df, aes(x=Accommodates, y=Price))+geom_point(color='blue')+
+  geom_smooth(method='lm', formula = y~x, color='red')+
+  xlab('Número de huéspedes')+ylab('Precio')
+
+g5 = ggplot(df, aes(x=Review.Scores.Location, y=Price))+geom_point(color='blue')+
+  geom_smooth(method='lm', formula = y~x, color='red')+
+  xlab('Puntuación en la reseña sobre ubicación')+ylab('Precio')
+
+g6 = ggplot(df, aes(x=Host.Response.Rate, y=Price))+geom_point(color='blue')+
+  geom_smooth(method='lm', formula = y~x, color='red')+
+  xlab('Tasa de respuesta del anfitrión')+ylab('Precio')
+
+gridExtra::grid.arrange(g1, g2, g3, g4, g5, g6,ncol=3, nrow=2)  
+
+```
+
+![](http://127.0.0.1:63954/chunk_output/s/2EADC810/crer4irf9prad/000026.png)
+
+Vamos a dividir los datos en training y testing:
+
+```{r}
+set.seed(1234)
+idx <- sample(1:nrow(df), nrow(df)*0.7)
+df.train <-df[idx,]
+df.test <-df[-idx,]
+```
+
+Calculamos el modelo con el dataset de training:
+
+```{r}
+model <- lm(data=df.train, formula = Price ~ Security.Deposit+Cleaning.Fee+Number.of.Reviews+Accommodates+Review.Scores.Location+Host.Response.Rate)
+summary(model)
+```
+
+El número de \* que hay a la derecha de cada fila indica su grado de confianza. Como vemos, todas las variables elegidas tienen algún efecto estadístico significativo, e influyen en el precio final del inmueble, a excepción del número de reseñas.
+
+Esto significa que podemos calcular el precio de un inmueble mediante la siguiente formula:
+
+*Price* = -43.3 + 0.04\**Security.Deposit +* 0.67\**Cleaning.Fee* -0.056\*Number.of.Reviews + 12.4\**Accommodates* + 6.47\**Review.Scores.Location* - 0.08\**Host.Response.Rate*
+
+Calculamos sus figuras de calidad (R²), tanto en training como en testing:
+
+```{r}
+df.train$price_est <- predict(model, df.train)
+caret::postResample(pred = df.train$price_est, obs=df.train$Price)
+```
+
+```{r}
+df.test$price_est <- predict(model, df.test)
+caret::postResample(pred = df.test$price_est, obs=df.test$Price)
+```
+
+Aquí vemos que tenemos un R² no demasiado bueno. Comprobemos el residuo:
+
+```{r}
+ggplot(df.test, aes(x=Price-price_est))+geom_histogram(color='black', fill='blue')+ggtitle("Residuos en testing")
+```
+
+```{r}
+ggplot(df.test, aes(x=Price, y=Price-price_est))+
+  geom_point(color='black')+ggtitle("Residuos en testing")+
+  geom_hline(yintercept = 0, color='red')
+```
+
+Se ve como a medida que aumenta el precio del inmueble, también lo hace el error del modelo. Este modelo no es especialmente bueno, pero podría ser útil si es rentable económicamente.
+
+## Mejora
+
+Vamos a intentar mejorar el modelo añadiendo más variables como Bedrooms, Bathrooms y Room Type y usando la columna LogPrice que contiene los precios en escala logarítmica.
+
+```{r}
+
+model <- lm(data=df.train, formula = LogPrice ~ Security.Deposit+Cleaning.Fee+Number.of.Reviews+Accommodates+Bedrooms+Bathrooms+Room.Type+Review.Scores.Location+Host.Response.Rate)
+
+summary(model)
+
+```
+
+```{r}
+df.train$price_est <- predict(model, df.train)
+caret::postResample(pred = df.train$price_est, obs=df.train$LogPrice)
+```
+
+```{r}
+df.test$price_est <- predict(model, df.test)
+caret::postResample(pred = df.test$price_est, obs=df.test$LogPrice)
+```
+
+Vemos que el R² mejora en comparación con nuestro modelo anterior.
+
+También comprobamos el residuo.
+
+```{r}
+library(ggplot2)
+ggplot(df.test, aes(x=LogPrice-price_est))+geom_histogram(color='black', fill='blue')+ggtitle("Residuos en testing")
+```
+
+```{r}
+ggplot(df.test, aes(x=LogPrice, y=LogPrice-log(price_est)))+
+  geom_point(color='black')+ggtitle("Residuos en testing")+
+  geom_hline(yintercept = 0, color='red')
+```
